@@ -36,7 +36,8 @@ async def main():
         [
             types.InlineKeyboardButton(text='📝 Заполнение анкеты', callback_data=f'forms')
         ],
-        [types.InlineKeyboardButton(text='⭐ Функционал Admin Bot', callback_data=f'info_user')]
+        [types.InlineKeyboardButton(text='⭐ Функционал Admin Bot', callback_data=f'info_user')],
+        [types.InlineKeyboardButton(text='⚙️ Настройки', callback_data=f'get_settings_menu_users')]
     ]
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
@@ -44,6 +45,7 @@ async def main():
 async def main_admins():
 
     admin_buttons = [
+        [types.InlineKeyboardButton(text='🧠 AI-помощник', callback_data=f'chat_gpt')],
         [types.InlineKeyboardButton(text='🛠️ Админ-панель', callback_data=f'admin_panel')],
         [
             types.InlineKeyboardButton(text='📝 Заполнение анкеты', callback_data=f'forms')
@@ -51,10 +53,38 @@ async def main_admins():
         [
             types.InlineKeyboardButton(text='📖 Информация с собраний', callback_data=f'get_meetings_info')
         ],
+        [
+            types.InlineKeyboardButton(text='⚙️ Настройки', callback_data=f'get_settings_menu')
+        ],
         [types.InlineKeyboardButton(text='⭐ Функционал Admin Bot', callback_data=f'info_admin')]
     ]
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=admin_buttons)
     return keyboard
+
+async def settings():
+    admin_buttons = [
+        [types.InlineKeyboardButton(text='⚙️ Изменить свой сервер', callback_data=f'change_server')],
+        [types.InlineKeyboardButton(text='🛠️ Изменить содержимое анкет', callback_data=f'process')],
+        [
+            types.InlineKeyboardButton(text='📝 Изменить доступы к функционалу', callback_data=f'process')
+        ],
+        [
+            types.InlineKeyboardButton(text='◀️ На главную', callback_data=f'to_main')
+        ],
+    ]
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=admin_buttons)
+    return keyboard
+
+async def settings_users():
+    admin_buttons = [
+        [types.InlineKeyboardButton(text='⚙️ Изменить свой сервер', callback_data=f'change_server')],
+        [
+            types.InlineKeyboardButton(text='◀️ На главную', callback_data=f'to_main')
+        ],
+    ]
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=admin_buttons)
+    return keyboard
+
 async def admin_msg(tg_id):
     buttons = [
         [
@@ -63,10 +93,27 @@ async def admin_msg(tg_id):
 
     ]
 
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
+
+async def new_admin_msg(tg_id):
+    buttons = [
+        [
+            types.InlineKeyboardButton(text='📛 Заблокировать (спам)', callback_data=f'ban_{tg_id}')
+        ]
+
+    ]
 
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
 
+async def change_categories():
+    all_categories = await get_categories()
+    keyboard = InlineKeyboardBuilder()
+    for category in all_categories:
+        keyboard.add(InlineKeyboardButton(text=f'🔗 {category.name}', callback_data=f'changeCategory_{category.id}'))
+    keyboard.add(InlineKeyboardButton(text='◀️ На главную', callback_data=f'to_main'))
+    return keyboard.adjust(2).as_markup()
 async def categories():
     all_categories = await get_categories()
     keyboard = InlineKeyboardBuilder()

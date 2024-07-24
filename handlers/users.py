@@ -13,12 +13,10 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton
 router = Router()
 
 
-chat = ''
-thread = ''
-category_msg = int
+
 isAns = False
 chat_reply = ''
-
+server = [2, 38, 70]
 
 
 
@@ -92,13 +90,14 @@ async def ban_user(message: Message):
 async def unban_user(message: Message):
     chats = await rq.get_chats()
     blacklist = await rq.get_banned_users()
+    command = message.text.split(' ', maxsplit=2)
+    tg_id = command[1]
+    reason = command[2]
     if message.chat.id in chats:
-        if message.from_user.id in blacklist:
-            command = message.text.split(' ', maxsplit=2)
-            tg_id = command[1]
-            reason = command[2]
+        if int(tg_id) in blacklist or int(tg_id) == blacklist:
             await rq.delete_ban(tg_id)
             await message.answer(f'<b>✅ Пользователь был разблокирован в Admin Bot.\n\n🔓 Причина: {reason}</b>', parse_mode='HTML')
+            await message.bot.send_message(chat_id=tg_id, text=f'<b>✅ Вы были разблокированы в Admin Bot.\n\n🔓 Причина: {reason}</b>', parse_mode='HTML')
         else:
             await message.answer(f'<b>🛡️ Пользователь не находится в блокировке Admin Bot.</b>', parse_mode='HTML')
 
@@ -106,27 +105,41 @@ async def unban_user(message: Message):
 async def handle_test_command(message: Message):
     await message.reply_sticker('CAACAgIAAxkBAAEMUpVmbel9tT4d-LxSKAzFgOFBEWneyAACvAwAAocoMEntN5GZWCFoBDUE')
 
+@router.message(Command('chat'))
+async def echo_message(message: Message):
+    chat_id = message.chat.id
+    try:
+        msg_thread_id = message.reply_to_message.message_thread_id
+    except AttributeError:
+        msg_thread_id = "General"
+    await message.reply(text=f"Chat ID этого чата: {chat_id}\nИ message_thread_id: {msg_thread_id}")
 
 # РЕАГИРОВАНИЯ НА КНОПКИ
 
 @router.callback_query(F.data == 'forms')
 async def serv(callback: CallbackQuery):
-    global category_msg
-    if chat != '' or chat == 'None':
-        admins = await rq.get_admins()
-        if callback.from_user.id not in admins:
-            item_data = await rq.get_category_item(category_msg, True)
-        else:
-            item_data = await rq.get_category_item(category_msg, False)
+    settings_form = await rq.get_settings(callback.from_user.id)
+    try:
+        if settings_form.chat != '' or settings_form.chat == 'None':
+            admins = await rq.get_admins()
+            if callback.from_user.id not in admins:
+                item_data = await rq.get_category_item(settings_form.category_msg, True)
+            else:
+                item_data = await rq.get_category_item(settings_form.category_msg, False)
 
-        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
-        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='to_main'))  # Добавление кнопки "назад"
-        await callback.message.edit_text(f'<b>{item_data.description}</b>', parse_mode='HTML',
-                                         reply_markup=kb_back.as_markup())
-        await callback.answer()
-    else:
-        await callback.message.edit_text('<b>📋 Выберите сервер:</b>', reply_markup=await kb.categories(), parse_mode='HTML')
-        await callback.answer()
+            kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+            kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='to_main'))  # Добавление кнопки "назад"
+            await callback.message.edit_text(f'<b>{item_data.description}</b>', parse_mode='HTML',
+                                             reply_markup=kb_back.as_markup())
+
+            await callback.answer()
+        else:
+            await callback.message.edit_text('<b>📋 Выберите сервер:</b>', reply_markup=await kb.categories(),
+                                             parse_mode='HTML')
+            await callback.answer()
+    except:
+            await callback.message.edit_text('<b>📋 Выберите сервер:</b>', reply_markup=await kb.categories(), parse_mode='HTML')
+            await callback.answer()
 @router.callback_query(F.data == 'info_user')
 async def settings(callback: CallbackQuery):
     await callback.message.edit_text('<b>🖥  Узнайте больше о возможностях Admin Bot!\n\n'
@@ -152,19 +165,37 @@ async def settings(callback: CallbackQuery):
 
     await callback.answer()
 
+@router.callback_query(F.data == 'get_settings_menu_users')
+async def settings(callback: CallbackQuery):
+    await callback.message.edit_text(text='<b>⚡⚙️ Меню настроек:\n\n1️⃣ Изменить сервер - данная функция позволяет изменить сервер. Если вы по каким-то причинам выбрали неправильный или вам необходимо сменить сервер, вы можете '
+                                          'это сделать при помощи данной настройки!</b>', parse_mode='HTML', reply_markup=await kb.settings_users())
+    await callback.answer()
 
+@router.callback_query(F.data.startswith('changeCategory_'))
+async def category(callback: CallbackQuery):
+    admins = await rq.get_admins()
+    if callback.from_user.id not in admins:
+        item_data = await rq.get_category_item(callback.data.split('_')[1], True)
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='get_settings_menu_users'))  # Добавление кнопки "назад"
+    else:
+        item_data = await rq.get_category_item(callback.data.split('_')[1], False)
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='get_settings_menu'))  # Добавление кнопки "назад"
+
+    await rq.change_settings(callback.from_user.id, item_data.chat, item_data.thread, item_data.category)
+    await callback.message.edit_text(f'<b>Сервер был выбран.</b>', parse_mode='HTML',
+                                     reply_markup=kb_back.as_markup())
+    await callback.answer('Вы выбрали сервер')
 @router.callback_query(F.data.startswith('category_'))
 async def category(callback: CallbackQuery):
-    global chat, thread, category_msg
     admins = await rq.get_admins()
     if callback.from_user.id not in admins:
         item_data = await rq.get_category_item(callback.data.split('_')[1], True)
     else:
         item_data = await rq.get_category_item(callback.data.split('_')[1], False)
 
-    chat = item_data.chat
-    thread = item_data.thread
-    category_msg = item_data.category
+    await rq.set_settings(callback.from_user.id, item_data.chat, item_data.thread, item_data.category)
     kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
     kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='to_main'))  # Добавление кнопки "назад"
     await callback.message.edit_text(f'<b>{item_data.description}</b>', parse_mode='HTML',
@@ -174,7 +205,8 @@ async def category(callback: CallbackQuery):
 
 @router.message()
 async def send(message: Message):
-    global chat, thread, category_msg, chat_reply
+    global chat_reply, server
+    user_settings = await rq.get_settings(message.from_user.id)
     banned_users = await rq.get_banned_users()
     reason = await rq.get_reason(message.from_user.id)
     chats = await rq.get_chats()
@@ -197,27 +229,44 @@ async def send(message: Message):
             if message.photo == None:
                 await message.bot.send_message(reply_to_message_id=message_reply_id, chat_id=str(user_id[0]),
                                                text=f'<b>{message.text}</b>', parse_mode='HTML')
-                await message.answer(text=f'<b>✅ Сообщение было отправлено пользователю.</b>',
-                                     parse_mode='HTML')
             else:
                 await message.bot.send_photo(reply_to_message_id=message_reply_id, chat_id=str(user_id[0]), photo=message.photo[-1].file_id, caption=f'<b>{message.caption}</b>', parse_mode='HTML')
-                await message.answer(text=f'<b>✅ Сообщение было отправлено пользователю.</b>',
-                                     parse_mode='HTML')
-    elif chat != '':
+    elif user_settings.chat != '':
+        chief_admin = await rq.get_tg_username(server[user_settings.category_msg-1])
         if message.photo == None:
+            admins = await rq.get_admins()
             msg_to_db = message.text.strip().replace('\n', '')
             await rq.set_messages(tg_id=message.from_user.id, username=f'@{message.from_user.username}',
                                   message=msg_to_db,
-                                  category=category_msg, msg_id=message.message_id)
-            await message.bot.send_message(chat_id=chat, text=f'<b>🆕 Новая анкета!\n\n{message.text}\n\n🧾 Данные о пользователе: @{message.from_user.username}, ID: <code>{message.from_user.id}</code></b>', message_thread_id=int(thread), parse_mode='HTML', reply_markup=await kb.admin_msg(tg_id=message.from_user.id))
-            await message.answer(text='<b>✅ Сообщение было отправлено администраторам Admin Bot.</b>', parse_mode='HTML', reply_markup=await kb.back())
+                                  category=user_settings.category_msg, msg_id=message.message_id)
+
+            if message.from_user.id not in admins:
+                await message.bot.send_message(chat_id=user_settings.chat,
+                                               text=f'<b>🆕 Новая анкета!\n\n{message.text}\n\n🧾 Данные о пользователе: @{message.from_user.username}, ID: <code>{message.from_user.id}</code></b>',
+                                               message_thread_id=int(user_settings.thread), parse_mode='HTML',
+                                               reply_markup=await kb.new_admin_msg(tg_id=message.from_user.id, tg_username=message.from_user.username, category=user_settings.category_msg))
+                await message.answer(text=f'<b>✅ Сообщение было отправлено администраторам Admin Bot на {server[user_settings.category_msg-1]} сервер.\n\n'
+                                          f'Если вы ошиблись сервером, имеется возможность изменить его в настройках.\n\n❗️ОЧЕНЬ ВАЖНО ❗️\n\n'
+                                          f'Необходимо прямо сейчас написать Главному Администратору в личные сообщения  (t.me/{chief_admin})  по форме ниже:\n\n'
+                                          '1. #админ\n'
+                                          '2. Свой NIckName (игровой)</b>', parse_mode='HTML', reply_markup=await kb.back())
+            else:
+                await message.bot.send_message(chat_id=user_settings.chat,
+                                               text=f'<b>🆕 Новая анкета!\n\n{message.text}\n\n🧾 Данные о пользователе: @{message.from_user.username}, ID: <code>{message.from_user.id}</code></b>',
+                                               message_thread_id=int(user_settings.thread), parse_mode='HTML',
+                                               reply_markup=await kb.admin_msg(tg_id=message.from_user.id))
+                await message.answer(
+                    text=f'<b>✅ Сообщение было отправлено администраторам Admin Bot на {server[user_settings.category_msg-1]} сервер.'
+                         f'\n\nЕсли вы ошиблись сервером, имеется возможность изменить его в настройках.</b>',
+                    parse_mode='HTML', reply_markup=await kb.back())
         else:
             msg_to_db = message.caption.strip().replace('\n', '')
             await rq.set_messages(tg_id=message.from_user.id, username=f'@{message.from_user.username}',
                                   message=msg_to_db,
-                                  category=category_msg, msg_id=message.message_id)
-            await message.bot.send_photo(chat_id=chat, photo=message.photo[-1].file_id, caption=f'<b>🆕 Новая анкета!\n\n{message.caption}\n\n🧾 Данные о пользователе: @{message.from_user.username}, ID: <code>{message.from_user.id}</code></b>' ,message_thread_id=int(thread), parse_mode='HTML', reply_markup=await kb.admin_msg(tg_id=message.from_user.id))
-            await message.answer(text='<b>✅ Сообщение было отправлено администраторам Admin Bot.</b>',
+                                  category=user_settings.category_msg, msg_id=message.message_id)
+            await message.bot.send_photo(chat_id=user_settings.chat, photo=message.photo[-1].file_id, caption=f'<b>🆕 Новая анкета!\n\n{message.caption}\n\n🧾 Данные о пользователе: @{message.from_user.username}, ID: <code>{message.from_user.id}</code></b>' ,message_thread_id=int(user_settings.thread), parse_mode='HTML', reply_markup=await kb.admin_msg(tg_id=message.from_user.id))
+            await message.answer(text=f'<b>✅ Сообщение было отправлено администраторам Admin Bot на '
+                                      f'{server[user_settings.category_msg]} сервер.\n\nЕсли вы ошиблись сервером, имеется возможность изменить его в настройках.</b>',
                                  parse_mode='HTML', reply_markup=await kb.back())
 
 

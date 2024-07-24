@@ -26,14 +26,19 @@ class Admin(StatesGroup):
     Set_Admin_Tg = State()
     Set_Admin_Nick = State()
     Set_Admin_Serv = State()
+    Set_Tg_Username = State()
     Set_Admin_Lvl = State()
     Del_Admin = State()
     Ip_dist = State()
     Ip_info = State()
     Set_Meeting = State()
+    Fast_Set_Admin_Nick = State()
+
+server = [2, 38, 70]
 
 @router.callback_query(F.data == 'admin_panel')
-async def panel(callback: CallbackQuery):
+async def panel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     await callback.message.edit_text('<b>📋 Выберите необходимый инструмент:</b>', reply_markup=await kb.admin_act(), parse_mode='HTML')
     await callback.answer()
 
@@ -51,24 +56,32 @@ async def get_ip(callback: CallbackQuery, state: FSMContext):
     kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
     kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel')) # Добавление кнопки "назад"
     await state.set_state(Admin.Ip_info)
-    await callback.message.edit_text('<b>🔍 Введите IP адрес для получения информации.\n\n<u>Пример</u>: 208.80.152.201</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+    await callback.message.edit_text('<b>🔍 Введите IP адрес для получения информации.\n\n<u>Пример</u>: 208.80.152.201</b>',
+                                     parse_mode='HTML', reply_markup=kb_back.as_markup())
     await callback.answer()
 @router.message(Admin.Ip_info)
-async def info_ip(message: Message):
-    kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
-    kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
-    ip = message.text
-    r = requests.get(f"http://ip-api.com/json/{ip}?lang=ru")
-    data = r.json()
-    country = data['country']
-    city = data['city']
-    isp = data['isp']
-    org = data['org']
-    await message.answer(f'<b>Информация по IP: {ip}\n\n'
-                         f'Страна: {country}\n'
-                         f'Город: {city}\n'
-                         f'Интернет-провайдер: {isp}\n'
-                         f'Название организации провайдера: {org}</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+async def info_ip(message: Message, state: FSMContext):
+    try:
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
+        ip = message.text
+        r = requests.get(f"http://ip-api.com/json/{ip}?lang=ru")
+        data = r.json()
+        country = data['country']
+        city = data['city']
+        isp = data['isp']
+        org = data['org']
+        await message.answer(f'<b>Информация по IP: {ip}\n\n'
+                             f'Страна: {country}\n'
+                             f'Город: {city}\n'
+                             f'Интернет-провайдер: {isp}\n'
+                             f'Название организации провайдера: {org}</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+    except:
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
+        await message.answer(
+            '<b>🔍 Введите IP адрес для получения информации.\n\n<u>Пример</u>: 208.80.152.201</b>', parse_mode='HTML',
+            reply_markup=kb_back.as_markup())
 
 @router.callback_query(F.data == 'set_meeting_info')
 async def set_info(callback: CallbackQuery, state: FSMContext):
@@ -85,16 +98,71 @@ async def set_info(callback: CallbackQuery, state: FSMContext):
         await callback.answer(show_alert=True, text='❌ Доступ закрыт.\n\nЗаполнять информацию с собраний могут только руководители сервера.')
 @router.callback_query(F.data == 'set_admin')
 async def set_admin(callback: CallbackQuery, state: FSMContext):
-    leads = await rq.get_leads()
     admin_level = await rq.get_admin_lvl(tg_id=callback.from_user.id)
-    if admin_level < 5:
-        await callback.answer('Доступ закрыт')
+    chats = await rq.get_chats()
+    print(admin_level)
+    if callback.message.chat.id not in chats:
+        if admin_level < 5:
+            await callback.answer('Доступ закрыт')
+        else:
+            kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+            kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
+            await callback.message.edit_text('<b>🆔 Введите Telegram ID пользователя:</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+            await state.set_state(Admin.Set_Admin_Tg)
+            await callback.answer()
+    else:
+        if admin_level < 5:
+            await callback.answer('Доступ закрыт')
+        else:
+            await callback.message.answer('<b>🆔 Введите Telegram ID пользователя:</b>', parse_mode='HTML')
+            await state.set_state(Admin.Set_Admin_Tg)
+            await callback.answer()
+@router.message(Admin.Set_Admin_Tg)
+async def rq_set_admin(message: Message, state: FSMContext):
+    if message.text.isdigit() == True:
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='set_admin'))  # Добавление кнопки "назад"
+        await state.update_data(chosen_tg=message.text)
+        await message.answer('<b>🔴 Введите Nick_Name пользователя в игре:\n\n<u>Пример</u>: Jaden_Young</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+        await state.set_state(Admin.Set_Admin_Nick)
     else:
         kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
-        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
-        await callback.message.edit_text('<b>🆔 Введите Telegram ID пользователя:</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
-        await state.set_state(Admin.Set_Admin_Tg.state)
-        await callback.answer()
+        kb_back.row(InlineKeyboardButton(text='⬅️ Начать сначала', callback_data='set_admin'))  # Добавление кнопки "назад"
+        await message.answer('<b>🙄 Начните сначала, что-то пошло не так..\n\n🆔 Введите корректный Telegram ID пользователя.</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+        await state.clear()
+@router.message(Admin.Set_Admin_Nick)
+async def rq_set_admin(message: Message, state: FSMContext):
+    flag = True
+    for i in range(len(message.text)):
+        if 65 <= ord(message.text[i]) <= 90 or 97 <= ord(message.text[i]) <= 122 or ord(message.text[i]) == 95:
+            continue
+        else:
+            kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+            kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='set_admin'))  # Добавление кнопки "назад"
+            await message.answer('<b>🙄 Начните сначала, что-то пошло не так..\n\n🔴 Введите корректный Nick_Name (английскийми буквами с нижним подчеркиванием):\n\n<u>Пример</u>: Jaden_Young</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+            await state.clear()
+            flag = False
+            break
+    if flag:
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='set_admin'))  # Добавление кнопки "назад"
+        await state.update_data(chosen_nick=message.text.title())
+        await state.set_state(Admin.Set_Tg_Username)
+        await message.answer(f'<b>📎 Отправьте тег пользователя в Telegram без символа @.\n\nПример: young_keef</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+
+@router.message(Admin.Set_Tg_Username)
+async def get_tg(message: Message, state: FSMContext):
+
+    if '@' not in message.text:
+        await state.update_data(chosen_tg_username=message.text)
+        await state.set_state(Admin.Set_Admin_Lvl)
+        await message.answer('<b>Выберите должность:</b>', parse_mode='HTML', reply_markup=await kb.admin_levels_act())
+    else:
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='set_admin'))  # Добавление кнопки "назад"
+        await message.answer(text='<b>😬 Начните сначала, что-то пошло не так..\n\n❗️ Нужно написать тег пользователя без символа "@".</b>', reply_markup=kb_back.as_markup())
+        await state.clear()
+
 @router.callback_query(Set_Level.filter())
 async def rq_set_admin_serv(callback: CallbackQuery, callback_data: Set_Level, state: FSMContext):
     chief_admin = await rq.get_admin_lvl(callback.from_user.id)
@@ -107,11 +175,21 @@ async def rq_set_admin_serv(callback: CallbackQuery, callback_data: Set_Level, s
         user_data = await state.get_data()
         pos = ['Администратор', 'Куратор администрации', 'Зам. Главного Администратора', 'Основной Зам. Главного Администратора', 'Главный администратор', 'Разработчик Admin Bot | Главный администратор']
         if int(user_data['chosen_tg']) not in admins and (user_data['chosen_nick']) not in admins_nick:
-            kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
-            kb_back.row(InlineKeyboardButton(text='⬅️ Список администрации',
-                                             callback_data=Pagination(action='cancel', page=0).pack()))  # Добавление кнопки "назад"
-            await rq.set_admin(user_data['chosen_tg'], user_data['chosen_nick'], user_data['chosen_serv'], user_data['chosen_lvl'], pos[user_data['chosen_lvl']-1])
-            await callback.message.edit_text(text=f'<b>🎉 Пользователь {user_data["chosen_nick"]} был добавлен в реестр администраторов!</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
+            chats = await rq.get_chats()
+            if callback.message.chat.id not in chats:
+                kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+                kb_back.row(InlineKeyboardButton(text='⬅️ Назад',
+                                                 callback_data='set_admin'))  # Добавление кнопки "назад"
+                kb_back.row(InlineKeyboardButton(text='⬅️ Список администрации',
+                                                 callback_data=Pagination(action='cancel', page=0).pack()))  # Добавление кнопки "назад"
+                await callback.message.edit_text(
+                    text=f'<b>🎉 Пользователь {user_data["chosen_nick"]} был добавлен в реестр администраторов!</b>',
+                    parse_mode='HTML', reply_markup=kb_back.as_markup())
+            else:
+                await callback.message.edit_text(
+                    text=f'<b>🎉 Пользователь {user_data["chosen_nick"]} был добавлен в реестр администраторов!</b>',
+                    parse_mode='HTML')
+            await rq.set_admin(user_data['chosen_tg'], user_data['chosen_nick'], user_data['chosen_serv'], user_data['chosen_lvl'], pos[user_data['chosen_lvl']-1], user_data['chosen_tg_username'])
             try:
                 file_path = "/root/bots/supportbot/grace.png"
                 await callback.message.bot.send_photo(chat_id=user_data["chosen_tg"], photo=types.FSInputFile(file_path), caption=f'<b>🥳 {user_data["chosen_nick"]}, вы были назначены на должность администратора {user_data["chosen_lvl"]} уровня в Admin Bot!\n\n🎉 Желаем приятного использования!\n\nНажмите /start для начала.</b>', parse_mode='HTML')
@@ -184,7 +262,7 @@ async def admin_stats(callback: CallbackQuery):
     kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
     kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data=Admin_Stats(users_id=tg_id).pack()))  # Добавление кнопки "назад"
     admin_state = await rq.get_admins_state(tg_id)
-    await callback.message.edit_text(f'<b>⭐ Данные администратора:\n\nNick_Name: {admin_state.username}\nДолжность: {admin_state.position}\nУровень доступа: {admin_state.level}\nСервер: {admin_state.server}\nTelegram ID: {admin_state.tg_id}</b>', reply_markup=kb_back.as_markup(), parse_mode='HTML')  # Отправка сообщения об успешном бане пользователя
+    await callback.message.edit_text(f'<b>⭐ Данные администратора:\n\nNick_Name: {admin_state.username}\nДолжность: {admin_state.position}\nУровень доступа: {admin_state.level}\nСервер: {admin_state.server}\nTelegram ID: {admin_state.tg_id}\nКонтактные данные: @{admin_state.tg_username}</b>', reply_markup=kb_back.as_markup(), parse_mode='HTML')  # Отправка сообщения об успешном бане пользователя
 
 @router.callback_query(F.data.startswith('updateLevelAct_'))
 async def update_level_act(callback: CallbackQuery):
@@ -264,19 +342,6 @@ async def set_message(callback: CallbackQuery):
         reply_markup=kb_back.as_markup(),
         parse_mode='HTML')
 
-@router.message(Admin.Set_Admin_Tg)
-async def rq_set_admin(message: Message, state: FSMContext):
-    if message.text.isdigit() == True:
-        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
-        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='set_admin'))  # Добавление кнопки "назад"
-        await state.update_data(chosen_tg=message.text)
-        await message.answer('<b>🔴 Введите Nick_Name пользователя в игре:\n\n<u>Пример</u>: Jaden_Young</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
-        await state.set_state(Admin.Set_Admin_Nick)
-    else:
-        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
-        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
-        await message.answer('<b>🆔 Введите корректный Telegram ID пользователя:</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
-        await state.set_state(Admin.Set_Admin_Tg.state)
 
 @router.message(Admin.Set_Meeting)
 async def set_meet(message: Message, state: FSMContext):
@@ -306,74 +371,64 @@ async def set_meet(message: Message, state: FSMContext):
 
 
 @router.message(Admin.Ip_dist)
-async def ip_dist(message: Message):
+async def ip_dist(message: Message, state: FSMContext):
     kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
     kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
     item_data = message.text.split(' ', 1)
-    ip1 = item_data[0]
-    ip2 = item_data[1]
-    def distance(Lat1, Lat2, Lon1, Lon2):
-        Lon1 = radians(Lon1)
-        Lon2 = radians(Lon2)
-        Lat1 = radians(Lat1)
-        Lat2 = radians(Lat2)
+    try:
+        ip1 = item_data[0]
+        ip2 = item_data[1]
+        def distance(Lat1, Lat2, Lon1, Lon2):
+            Lon1 = radians(Lon1)
+            Lon2 = radians(Lon2)
+            Lat1 = radians(Lat1)
+            Lat2 = radians(Lat2)
 
-        DLon = Lon2 - Lon1  # магия тригонометрии
-        DLat = Lat2 - Lat1  # магия тригонометрии
-        P = sin(DLat / 2) ** 2 + cos(Lat1) * cos(Lat2) * sin(DLon / 2) ** 2  # магия тригонометрии
-        Q = 2 * asin(sqrt(P))  # магия тригонометрии
-        R = 6371  # радиус земли
+            DLon = Lon2 - Lon1  # магия тригонометрии
+            DLat = Lat2 - Lat1  # магия тригонометрии
+            P = sin(DLat / 2) ** 2 + cos(Lat1) * cos(Lat2) * sin(DLon / 2) ** 2  # магия тригонометрии
+            Q = 2 * asin(sqrt(P))  # магия тригонометрии
+            R = 6371  # радиус земли
 
-        return (Q * R)
+            return (Q * R)
 
-    r = requests.get(f"http://ip-api.com/json/{ip1}?lang=ru")
-    data = r.json()
-    Lat1 = data['lat']
-    Lon1 = data['lon']
-    country1 = data['country']
-    city1 = data['city']
-    isp1 = data['isp']
-    org1 = data['org']
-    r2 = requests.get(f"http://ip-api.com/json/{ip2}?lang=ru")
-    data2 = r2.json()
-    Lat2 = data2['lat']
-    Lon2 = data2['lon']
-    country2 = data2['country']
-    city2 = data2['city']
-    isp2 = data2['isp']
-    org2 = data2['org']
+        r = requests.get(f"http://ip-api.com/json/{ip1}?lang=ru")
+        data = r.json()
+        Lat1 = data['lat']
+        Lon1 = data['lon']
+        country1 = data['country']
+        city1 = data['city']
+        isp1 = data['isp']
+        org1 = data['org']
+        r2 = requests.get(f"http://ip-api.com/json/{ip2}?lang=ru")
+        data2 = r2.json()
+        Lat2 = data2['lat']
+        Lon2 = data2['lon']
+        country2 = data2['country']
+        city2 = data2['city']
+        isp2 = data2['isp']
+        org2 = data2['org']
 
-    result = round(distance(Lat1, Lat2, Lon1, Lon2))
-    await message.answer(f'<b>Информация по IP 1: {ip1}\n\n'
-                         f'Страна: {country1}\n'
-                         f'Город: {city1}\n'
-                         f'Интернет-провайдер: {isp1}\n'
-                         f'Название организации провайдера: {org1}\n\n'
-                         f'Информация по IP 2: {ip2}\n\n'
-                         f'Страна: {country2}\n'
-                         f'Город: {city2}\n'
-                         f'Интернет-провайдер: {isp2}\n'
-                         f'Название организации провайдера: {org2}\n\n'
-                         f'<u>Расстояние между IP: {result} километров</u></b>', parse_mode='HTML',
-                         reply_markup=kb_back.as_markup())  # результат
+        result = round(distance(Lat1, Lat2, Lon1, Lon2))
+        await message.answer(f'<b>Информация по IP 1: {ip1}\n\n'
+                             f'Страна: {country1}\n'
+                             f'Город: {city1}\n'
+                             f'Интернет-провайдер: {isp1}\n'
+                             f'Название организации провайдера: {org1}\n\n'
+                             f'Информация по IP 2: {ip2}\n\n'
+                             f'Страна: {country2}\n'
+                             f'Город: {city2}\n'
+                             f'Интернет-провайдер: {isp2}\n'
+                             f'Название организации провайдера: {org2}\n\n'
+                             f'<u>Расстояние между IP: {result} километров</u></b>', parse_mode='HTML',
+                             reply_markup=kb_back.as_markup())  # результат
+    except:
+        kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
+        kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='admin_panel'))  # Добавление кнопки "назад"
+        await message.answer(
+            '<b>🔍 Введите 2 IP-адреса через пробел для получения информации.\n\n<u>Пример</u>: 208.80.152.201 91.198.174.192</b>',
+            parse_mode='HTML', reply_markup=kb_back.as_markup())
 
-@router.message(Admin.Set_Admin_Nick)
-async def rq_set_admin(message: Message, state: FSMContext):
-    flag = True
-    for i in range(len(message.text)):
-        if 65 <= ord(message.text[i]) <= 90 or 97 <= ord(message.text[i]) <= 122 or ord(message.text[i]) == 95:
-            continue
-        else:
-            kb_back = InlineKeyboardBuilder()  # Создание клавиатуры
-            kb_back.row(InlineKeyboardButton(text='⬅️ Назад', callback_data='set_admin'))  # Добавление кнопки "назад"
-            await message.answer('<b>🔴 Введите корректный Nick_Name (английскийми буквами с нижним подчеркиванием):\n\n<u>Пример</u>: Jaden_Young</b>', parse_mode='HTML', reply_markup=kb_back.as_markup())
-            await state.set_state(Admin.Set_Admin_Nick)
-            flag = False
-            break
-    if flag:
-        await state.update_data(chosen_nick=message.text.title())
-        await state.set_state(Admin.Set_Admin_Lvl)
-        await message.answer('<b>Выберите должность:</b>', parse_mode='HTML', reply_markup=await kb.admin_levels_act())
 
 @router.callback_query(F.data.startswith('delMeeting_'))
 async def del_meeting(callback: CallbackQuery):
@@ -412,10 +467,45 @@ async def settings(callback: CallbackQuery):
                                      '3️⃣ Информация с собраний:\n\n'
                                      '1. Возможность просматривать информацию с собраний, которые создали руководители сервера.\n'
                                      '2. Удобная пагинация кнопок по страницам (на каждой по 10 кнопок).\n\n'
-
+                                     
+                                     '4️⃣ AI-помощник:\n\n'
+                                     '1. Возможность общаться с AI-помощником Максимом, который всегда подскажет, какое наказание'
+                                     'выдается за то или иное нарушение игрока.\n'
+                                     '2. Поддержка общения с Максимом, использование самых лучших библиотек для формирования качественных ответов.\n\n'
+                                     
                                      '🚀 Просто и удобно вместе с Admin Bot!\n\n'
 
                                      '🔗 Контакты разработчика - @young_keef</b>', parse_mode='HTML',
                                      reply_markup=await kb.back())
 
     await callback.answer()
+
+@router.callback_query(F.data == 'get_settings_menu')
+async def settings(callback: CallbackQuery):
+    await callback.message.edit_text(text='<b>⚡⚙️ Меню настроек:\n\n1️⃣ Изменить сервер - данная функция позволяет изменить сервер. Если вы по каким-то причинам выбрали неправильный или вам необходимо сменить сервер, вы можете '
+                                          'это сделать при помощи данной настройки!</b>', parse_mode='HTML', reply_markup=await kb.settings())
+    await callback.answer()
+
+@router.callback_query(F.data == 'change_server')
+async def change_serv(callback: CallbackQuery):
+    await callback.message.edit_text('<b>📋 Выберите сервер:</b>', reply_markup=await kb.change_categories(), parse_mode='HTML')
+    await callback.answer()
+
+@router.callback_query(F.data == 'process')
+async def process(callback: CallbackQuery):
+    await callback.answer(show_alert=True, text='Пока в разработке..')
+
+@router.callback_query(F.data.startswith('setAdmin-'))
+async def fast_admin(callback: CallbackQuery, state: FSMContext):
+    global server
+    item_data = callback.data.split('-', 3)
+    print(item_data)
+    tg_id = item_data[1]
+    tg_username = item_data[3]
+    serv = server[int(item_data[2])-1]
+    await rq.set_admin(tg_id, 'Test_Test22', serv,
+                       1, 'Администратор', tg_username)
+    await callback.answer()
+
+
+

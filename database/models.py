@@ -30,6 +30,7 @@ class Admin(Base):
     level: Mapped[int] = mapped_column()
     tg_id = mapped_column(BigInteger)
     position: Mapped[str] = mapped_column(String(20))
+    tg_username: Mapped[str] = mapped_column(String(20))
 
 
 class Blacklist(Base):
@@ -76,6 +77,14 @@ class Mettings_Info(Base):
     level: Mapped[int] = mapped_column()
     datetime_meeting: Mapped[str] = mapped_column(String(25))
     description: Mapped[str] = mapped_column(String(2000))
+    tg_id = mapped_column(BigInteger)
+
+class Settings(Base):
+    __tablename__ = 'settings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat: Mapped[int] = mapped_column()
+    thread: Mapped[int] = mapped_column()
+    category_msg: Mapped[int] = mapped_column()
     tg_id = mapped_column(BigInteger)
 
 async def async_main():

@@ -1,5 +1,5 @@
 from database.models import async_session
-from database.models import User, Category, Item, Messages, Blacklist, Admin, Lead, Mettings_Info
+from database.models import User, Category, Item, Messages, Blacklist, Admin, Lead, Mettings_Info, Settings
 from sqlalchemy import select, delete, update
 from sqlalchemy import desc
 
@@ -101,14 +101,15 @@ async def get_leads():
     async with async_session() as session:
         return await session.scalars(select(Lead.tg_id))
 
-async def set_admin(tg_id, username, server, level, pos):
+async def set_admin(tg_id, username, server, level, pos, tg_username):
     async with async_session() as session:
         await session.scalar(select(Admin).where(Admin.tg_id == tg_id))
         await session.scalar(select(Admin).where(Admin.username == username))
         await session.scalar(select(Admin).where(Admin.server == server))
         await session.scalar(select(Admin).where(Admin.level == level))
         await session.scalar(select(Admin).where(Admin.position == pos))
-        session.add(Admin(tg_id=tg_id, username=username, server=server, level=level, position=pos))
+        await session.scalar(select(Admin).where(Admin.tg_username == tg_username))
+        session.add(Admin(tg_id=tg_id, username=username, server=server, level=level, position=pos, tg_username=tg_username))
         await session.commit()
 
 async def del_admin(tg_id):
@@ -157,3 +158,26 @@ async def del_meeting(id):
         delete_query = delete(Mettings_Info).where(Mettings_Info.id == id)
         await session.execute(delete_query)
         await session.commit()
+
+async def get_tg_username(server):
+    async with async_session() as session:
+        print(server)
+        return await session.scalar(select(Admin.tg_username).where(Admin.server == server, Admin.level >= 5))
+
+async def set_settings(tg_id, chat, thread, category_msg):
+    async with async_session() as session:
+        await session.scalar(select(Settings).where(Settings.tg_id == tg_id))
+        await session.scalar(select(Settings).where(Settings.chat == chat))
+        await session.scalar(select(Settings).where(Settings.thread == thread))
+        await session.scalar(select(Settings).where(Settings.category_msg == category_msg))
+        session.add(Settings(tg_id=tg_id, chat=chat, thread=thread, category_msg=category_msg))
+        await session.commit()
+
+async def change_settings(tg_id, chat, thread, category_msg):
+    async with async_session() as session:
+        update_query = update(Settings).where(Settings.tg_id == tg_id).values(chat=chat, thread=thread, category_msg=category_msg)
+        await session.execute(update_query)
+        await session.commit()
+async def get_settings(tg_id):
+    async with async_session() as session:
+        return await session.scalar(select(Settings).where(Settings.tg_id == tg_id))
